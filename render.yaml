@@ -1,0 +1,21 @@
+# ============================================================
+#  Render.com — Infrastructure as Code
+#  Sube este archivo a la raíz del repo para auto-deploy
+# ============================================================
+services:
+  - type: web
+    name: lattiformapi
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter          # $7/mes — 512MB RAM, suficiente para geometría media
+    # plan: standard       # $25/mes — 2GB RAM, para resolución "high" y "ultra"
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: LATTIFORM_API_KEY
+        generateValue: true   # Render genera una key aleatoria para autenticar
+    autoDeploy: true
