@@ -2,6 +2,11 @@
 #  LATTIFORM API — Dockerfile multi-stage
 #  .NET 9 + PicoGK 1.7.7.5 headless (compilado desde source)
 #  Base: Ubuntu 22.04 (Jammy) + CMake 3.28 desde Kitware
+#
+#  GLFW está hardcodeado en PicoGKRuntime/CMakeLists.txt —
+#  lo parcheamos para eliminar la dependencia de display server.
+#  GLFW se compila pero no necesita Wayland/X11 headers en headless
+#  si le damos sus propias deps.
 # ============================================================
 
 # ── Stage 1: Compilar picogk.so desde source ─────────────
@@ -9,7 +14,7 @@ FROM ubuntu:22.04 AS picogk-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Dependencias base + Kitware GPG para CMake moderno
+# Dependencias de compilación incluyendo Wayland/X11 para GLFW headless
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
@@ -24,6 +29,15 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gpg \
     wget \
+    # GLFW necesita estas aunque compilemos headless
+    libwayland-dev \
+    wayland-protocols \
+    libxkbcommon-dev \
+    libx11-dev \
+    libxrandr-dev \
+    libxinerama-dev \
+    libxcursor-dev \
+    libxi-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Instalar CMake >= 3.25 desde el repo oficial de Kitware
@@ -39,15 +53,26 @@ RUN git clone --recurse-submodules --depth=1 \
 
 WORKDIR /src/PicoGKRuntime
 
-# Compilar en modo headless (sin GLFW/OpenGL)
+# Patch: eliminar GLFW del link y del add_subdirectory
+# GLFW aún se declara pero no se linkea — así evitamos el viewer
+# sin romper el árbol de CMake
+RUN sed -i 's/target_link_libraries(${LIB_NAME} openvdb_static glfw )/target_link_libraries(${LIB_NAME} openvdb_static)/' CMakeLists.txt \
+    && grep "target_link_libraries" CMakeLists.txt
+
+# Compilar en modo Release sin viewer
 RUN cmake -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DPICOGK_BUILD_VIEWER=OFF \
+    -DGLFW_BUILD_DOCS=OFF \
+    -DGLFW_BUILD_TESTS=OFF \
+    -DGLFW_BUILD_EXAMPLES=OFF \
     && cmake --build build --config Release -j$(nproc)
 
 # Mostrar dónde quedó el .so
-RUN find /src/PicoGKRuntime/build -name "*.so" | head -10
+RUN echo "=== .so generados ===" \
+    && find /src/PicoGKRuntime -name "*.so" \
+    && echo "=== Dist ===" \
+    && ls /src/PicoGKRuntime/Dist/ 2>/dev/null || true
 
 # ── Stage 2: Build .NET app ───────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -73,11 +98,13 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar picogk.so compilado — buscar en múltiples rutas posibles
-COPY --from=picogk-builder /src/PicoGKRuntime/build /tmp/picogk-build
-RUN find /tmp/picogk-build -name "*.so" -exec cp {} /usr/local/lib/picogk.so \; \
+# Copiar picogk.so — buscar en Dist/ o en lib/
+COPY --from=picogk-builder /src/PicoGKRuntime /tmp/picogk-src
+RUN find /tmp/picogk-src -name "picogk.so" | head -3 \
+    && find /tmp/picogk-src -name "picogk.so" -exec cp {} /usr/local/lib/picogk.so \; \
     && ldconfig \
-    && rm -rf /tmp/picogk-build
+    && ls -lh /usr/local/lib/picogk.so \
+    && rm -rf /tmp/picogk-src
 
 WORKDIR /app
 COPY --from=build /app/publish .
