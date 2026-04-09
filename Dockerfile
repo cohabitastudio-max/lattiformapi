@@ -82,15 +82,10 @@ RUN echo "=== target_include_directories ===" \
 RUN cmake -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-<<<<<<< HEAD
     -DGLFW_BUILD_DOCS=OFF \
     -DGLFW_BUILD_TESTS=OFF \
     -DGLFW_BUILD_EXAMPLES=OFF \
-    && cmake --build build --config Release -j$(nproc)
-=======
-    -DPICOGK_BUILD_VIEWER=OFF \
     && cmake --build build --target picogk --config Release -j$(nproc)
->>>>>>> ca332f6 (fix LEAP71 namespaces and build only picogk target)
 
 # Ubicar el .so
 RUN echo "=== .so files ===" \
