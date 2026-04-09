@@ -40,7 +40,7 @@ RUN cmake -B build -G Ninja \
 RUN find /src/PicoGKRuntime/build -name "*.so" | head -5
 
 # ── Stage 2: Build .NET app ───────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:9.0-jammy AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 
 WORKDIR /src
 COPY LattiformAPI.csproj .
@@ -50,7 +50,7 @@ COPY . .
 RUN dotnet publish -c Release -r linux-x64 --self-contained false -o /app/publish
 
 # ── Stage 3: Runtime final ────────────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:9.0-jammy AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 
 RUN apt-get update && apt-get install -y \
     libgomp1 \
