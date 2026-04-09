@@ -1,12 +1,12 @@
 # ============================================================
 #  LATTIFORM API — Dockerfile multi-stage
-#  .NET 9 + PicoGK 1.7.7.5 headless (compilado desde source)
-#  Base: Ubuntu 22.04 (Jammy) + CMake 3.28 desde Kitware
+#  .NET 9 + PicoGK headless (compilado desde source)
+#  Base: Ubuntu 22.04 + CMake 3.28 desde Kitware
 #
-#  GLFW está hardcodeado en PicoGKRuntime/CMakeLists.txt —
-#  lo parcheamos para eliminar la dependencia de display server.
-#  GLFW se compila pero no necesita Wayland/X11 headers en headless
-#  si le damos sus propias deps.
+#  PicoGKGLViewer.cpp incluye <GLFW/glfw3.h> incondicionalmente.
+#  Solución: compilar GLFW primero como librería estática,
+#  luego compilar PicoGK apuntando a sus includes.
+#  El .so final no requiere display server en runtime.
 # ============================================================
 
 # ── Stage 1: Compilar picogk.so desde source ─────────────
@@ -14,7 +14,7 @@ FROM ubuntu:22.04 AS picogk-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Dependencias de compilación incluyendo Wayland/X11 para GLFW headless
+# Todas las dependencias incluyendo display headers para GLFW
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
@@ -29,7 +29,6 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gpg \
     wget \
-    # GLFW necesita estas aunque compilemos headless
     libwayland-dev \
     wayland-protocols \
     libxkbcommon-dev \
@@ -38,28 +37,33 @@ RUN apt-get update && apt-get install -y \
     libxinerama-dev \
     libxcursor-dev \
     libxi-dev \
+    libgl-dev \
+    libgles2-mesa-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Instalar CMake >= 3.25 desde el repo oficial de Kitware
+# CMake >= 3.25 desde Kitware
 RUN wget -qO /tmp/kitware.sh https://apt.kitware.com/kitware-archive.sh \
     && bash /tmp/kitware.sh \
     && apt-get update && apt-get install -y cmake \
     && cmake --version \
     && rm -rf /var/lib/apt/lists/*
 
-# Clonar PicoGKRuntime con submodules
+# Clonar PicoGKRuntime con submodules (GLFW + openvdb)
 RUN git clone --recurse-submodules --depth=1 \
     https://github.com/leap71/PicoGKRuntime.git /src/PicoGKRuntime
 
 WORKDIR /src/PicoGKRuntime
 
-# Patch: eliminar GLFW del link y del add_subdirectory
-# GLFW aún se declara pero no se linkea — así evitamos el viewer
-# sin romper el árbol de CMake
-RUN sed -i 's/target_link_libraries(${LIB_NAME} openvdb_static glfw )/target_link_libraries(${LIB_NAME} openvdb_static)/' CMakeLists.txt \
-    && grep "target_link_libraries" CMakeLists.txt
+# Patch CMakeLists: quitar glfw del link final
+# (GLFW se compila como submodule pero el .so headless no lo necesita en runtime)
+RUN sed -i \
+    's/target_link_libraries(${LIB_NAME} openvdb_static glfw )/target_link_libraries(${LIB_NAME} openvdb_static)/' \
+    CMakeLists.txt \
+    && echo "✅ patch glfw link:" \
+    && grep "target_link_libraries.*LIB_NAME" CMakeLists.txt
 
-# Compilar en modo Release sin viewer
+# Compilar: GLFW se incluirá en el árbol CMake y proveerá los headers
+# Los binarios de GLFW se compilan pero no se linkean en el .so final
 RUN cmake -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -68,11 +72,13 @@ RUN cmake -B build -G Ninja \
     -DGLFW_BUILD_EXAMPLES=OFF \
     && cmake --build build --config Release -j$(nproc)
 
-# Mostrar dónde quedó el .so
-RUN echo "=== .so generados ===" \
-    && find /src/PicoGKRuntime -name "*.so" \
+# Ubicar el .so generado
+RUN echo "=== .so files ===" \
+    && find /src/PicoGKRuntime -name "picogk*.so" \
     && echo "=== Dist ===" \
-    && ls /src/PicoGKRuntime/Dist/ 2>/dev/null || true
+    && ls /src/PicoGKRuntime/Dist/ 2>/dev/null || true \
+    && echo "=== build/lib ===" \
+    && ls /src/PicoGKRuntime/build/lib/ 2>/dev/null || true
 
 # ── Stage 2: Build .NET app ───────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -98,10 +104,11 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar picogk.so — buscar en Dist/ o en lib/
+# Copiar picogk.so — buscar en Dist/ y lib/
 COPY --from=picogk-builder /src/PicoGKRuntime /tmp/picogk-src
-RUN find /tmp/picogk-src -name "picogk.so" | head -3 \
-    && find /tmp/picogk-src -name "picogk.so" -exec cp {} /usr/local/lib/picogk.so \; \
+RUN SO=$(find /tmp/picogk-src -name "picogk.so" | head -1) \
+    && echo "Copiando: $SO" \
+    && cp "$SO" /usr/local/lib/picogk.so \
     && ldconfig \
     && ls -lh /usr/local/lib/picogk.so \
     && rm -rf /tmp/picogk-src
@@ -109,7 +116,6 @@ RUN find /tmp/picogk-src -name "picogk.so" | head -3 \
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Copia local junto al ejecutable (fallback de P/Invoke)
 RUN cp /usr/local/lib/picogk.so . 2>/dev/null || true
 
 ENV ASPNETCORE_URLS="http://+:${PORT:-8080}"
