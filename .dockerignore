@@ -1,0 +1,9 @@
+ShapeKernel/
+ImplicitLibrary/
+.git/
+.github/
+bin/
+obj/
+*.md
+deploy.sh
+render.yaml

@@ -2,8 +2,13 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="PicoGK" Version="1.7.7.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="ShapeKernel/**" />
+    <Compile Remove="ImplicitLibrary/**" />
   </ItemGroup>
 </Project>
