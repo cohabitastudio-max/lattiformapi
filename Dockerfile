@@ -2,11 +2,6 @@
 #  LATTIFORM API — Dockerfile multi-stage
 #  .NET 9 + PicoGK headless (compilado desde source)
 #  Base: Ubuntu 22.04 + CMake 3.28 desde Kitware
-#
-#  PicoGKGLViewer.cpp incluye <GLFW/glfw3.h> incondicionalmente.
-#  Solución: compilar GLFW primero como librería estática,
-#  luego compilar PicoGK apuntando a sus includes.
-#  El .so final no requiere display server en runtime.
 # ============================================================
 
 # ── Stage 1: Compilar picogk.so desde source ─────────────
@@ -14,7 +9,6 @@ FROM ubuntu:22.04 AS picogk-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Todas las dependencias incluyendo display headers para GLFW
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
@@ -54,16 +48,37 @@ RUN git clone --recurse-submodules --depth=1 \
 
 WORKDIR /src/PicoGKRuntime
 
-# Patch CMakeLists: quitar glfw del link final
-# (GLFW se compila como submodule pero el .so headless no lo necesita en runtime)
-RUN sed -i \
-    's/target_link_libraries(${LIB_NAME} openvdb_static glfw )/target_link_libraries(${LIB_NAME} openvdb_static)/' \
-    CMakeLists.txt \
-    && echo "✅ patch glfw link:" \
-    && grep "target_link_libraries.*LIB_NAME" CMakeLists.txt
+# Patch 1: agregar GLFW/include al include path del target picogk
+# Patch 2: quitar glfw del link (no necesitamos display en runtime)
+RUN python3 - << 'PYEOF'
+with open('CMakeLists.txt', 'r') as f:
+    txt = f.read()
 
-# Compilar: GLFW se incluirá en el árbol CMake y proveerá los headers
-# Los binarios de GLFW se compilan pero no se linkean en el .so final
+# Patch 1: agregar include path de GLFW headers justo antes de target_link_libraries
+glfw_include = (
+    "# Headless: exponer headers de GLFW sin linkear la lib\n"
+    "target_include_directories(${LIB_NAME} PRIVATE ${PICOGK_ROOT_DIR}/GLFW/include)\n"
+)
+insert_point = "target_link_libraries(${LIB_NAME} openvdb_static glfw )"
+txt = txt.replace(insert_point, glfw_include + insert_point)
+
+# Patch 2: quitar glfw del link
+txt = txt.replace(
+    "target_link_libraries(${LIB_NAME} openvdb_static glfw )",
+    "target_link_libraries(${LIB_NAME} openvdb_static)"
+)
+
+with open('CMakeLists.txt', 'w') as f:
+    f.write(txt)
+
+print("✅ Patches aplicados")
+PYEOF
+
+# Verificar patches
+RUN echo "=== target_include_directories ===" \
+    && grep -n "GLFW/include\|target_include_directories.*LIB_NAME\|target_link_libraries.*LIB_NAME" CMakeLists.txt
+
+# Compilar
 RUN cmake -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
@@ -72,7 +87,7 @@ RUN cmake -B build -G Ninja \
     -DGLFW_BUILD_EXAMPLES=OFF \
     && cmake --build build --config Release -j$(nproc)
 
-# Ubicar el .so generado
+# Ubicar el .so
 RUN echo "=== .so files ===" \
     && find /src/PicoGKRuntime -name "picogk*.so" \
     && echo "=== Dist ===" \
@@ -104,7 +119,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar picogk.so — buscar en Dist/ y lib/
+# Copiar picogk.so
 COPY --from=picogk-builder /src/PicoGKRuntime /tmp/picogk-src
 RUN SO=$(find /tmp/picogk-src -name "picogk.so" | head -1) \
     && echo "Copiando: $SO" \
@@ -115,7 +130,6 @@ RUN SO=$(find /tmp/picogk-src -name "picogk.so" | head -1) \
 
 WORKDIR /app
 COPY --from=build /app/publish .
-
 RUN cp /usr/local/lib/picogk.so . 2>/dev/null || true
 
 ENV ASPNETCORE_URLS="http://+:${PORT:-8080}"
