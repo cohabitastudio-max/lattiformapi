@@ -6,11 +6,6 @@
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="ShapeKernel/**/*.cs" />
-    <Compile Include="LatticeLibrary/**/*.cs" />
-    <Compile Include="ImplicitLibrary/**/*.cs" />
-  </ItemGroup>
-  <ItemGroup>
     <PackageReference Include="PicoGK" Version="1.7.7.5" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
