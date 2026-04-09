@@ -82,11 +82,11 @@ app.MapGet("/api/types", () => new
 });
 
 // ── Endpoint principal de generación ──────────────────────
-app.MapPost("/api/generate", async (GenerateRequest req) =>
+app.MapPost("/api/generate", (GenerateRequest req) =>
 {
     try
     {
-        var result = await Task.Run(() => GenerateGeometry(req));
+        var result = GenerateGeometry(req);
         return Results.Ok(result);
     }
     catch (Exception ex)
@@ -98,11 +98,37 @@ app.MapPost("/api/generate", async (GenerateRequest req) =>
     }
 });
 
-app.MapPost("/api/tpms",    async (TPMSRequest req)    =>
-    await Task.Run(() => GenerateTPMS(req)));
+app.MapPost("/api/tpms", (TPMSRequest req) =>
+{
+    try
+    {
+        var result = GenerateTPMS(req);
+        return Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            title:      "TPMS generation failed",
+            detail:     ex.Message,
+            statusCode: 500);
+    }
+});
 
-app.MapPost("/api/lattice", async (LatticeRequest req) =>
-    await Task.Run(() => GenerateLattice(req)));
+app.MapPost("/api/lattice", (LatticeRequest req) =>
+{
+    try
+    {
+        var result = GenerateLattice(req);
+        return Results.Ok(result);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(
+            title:      "Lattice generation failed",
+            detail:     ex.Message,
+            statusCode: 500);
+    }
+});
 
 app.Run();
 
