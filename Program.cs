@@ -162,8 +162,8 @@ static GenerateResponse GenerateGeometry(GenerateRequest req)
         {
             VoxelSize     = voxelSize,
             BoundingBoxMM = req.BoundingBox ?? new float[] { 50, 50, 50 },
-            TriangleCount = mesh.nFaceCount,
-            VertexCount   = mesh.nVertexCount,
+            TriangleCount = mesh.nTriangleCount(),
+            VertexCount   = mesh.nVertexCount(),
         }
     };
 }
@@ -192,7 +192,7 @@ static Voxels BuildTPMS(string type, Dictionary<string, float>? p, float[]? bbox
         "schwarz_p" => new ImplicitSchwarzPrimitive(cell, wall),
         "schwarz_d" => new ImplicitSchwarzDiamond(cell, wall),
         "gyroid"    => new ImplicitSplitVoidGyroid(cell, wall, true),
-        "lidinoid"  => BuildLidinoidImplicit(cell, wall),
+        "lidinoid"  => new ImplicitLidinoid(cell, wall),
         "iwp"       => new ImplicitSchwarzPrimitive(cell * 0.9f, wall),  // IWP approx
         _           => new ImplicitSchwarzPrimitive(cell, wall)
     };
@@ -200,29 +200,6 @@ static Voxels BuildTPMS(string type, Dictionary<string, float>? p, float[]? bbox
     voxBox.IntersectImplicit(surface);
     return voxBox;
 }
-
-// Lidinoid via RawTPMSPattern
-static IImplicit BuildLidinoidImplicit(float cell, float wall)
-{
-    // RawLidinoidTPMSPattern implementa IImplicit directamente
-    var raw = new RawLidinoidTPMSPattern();
-    // Wrap con escala de celda y grosor de pared
-    return new ScaledTPMS(raw, cell, wall);
-}
-
-// Wrapper para escalar el patrón TPMS crudo
-class ScaledTPMS : IImplicit
-{
-    readonly IImplicit m_oPattern;
-    readonly float     m_fScale;
-    readonly float     m_fWall;
-
-    public ScaledTPMS(IImplicit oPattern, float fCellSize, float fWall)
-    {
-        m_oPattern = oPattern;
-        m_fScale   = (2f * MathF.PI) / fCellSize;
-        m_fWall    = fWall;
-    }
 
     public float fSignedDistance(in Vector3 vecPt)
     {
