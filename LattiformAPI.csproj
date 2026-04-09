@@ -10,5 +10,6 @@
   <ItemGroup>
     <Compile Remove="ShapeKernel/**" />
     <Compile Remove="ImplicitLibrary/**" />
+    <Compile Remove="LatticeLibrary/**" />
   </ItemGroup>
 </Project>

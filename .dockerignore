@@ -1,5 +1,6 @@
 ShapeKernel/
 ImplicitLibrary/
+LatticeLibrary/
 .git/
 .github/
 bin/
