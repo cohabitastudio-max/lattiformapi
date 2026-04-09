@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using System;
-using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
@@ -10,18 +9,17 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 var app = builder.Build();
 app.UseCors();
 
-// ── Detect PicoGK availability ──
+// ── Detect PicoGK by checking if native lib loads ──
 bool picoGKAvailable = false;
 try
 {
-    // Try loading PicoGK - if native lib exists, this succeeds
-    var testType = typeof(PicoGK.Library);
-    PicoGK.Library.Go(0.5f, 0, 0, null, null);
-    picoGKAvailable = true;
+    if (System.IO.File.Exists("/usr/local/lib/libpicogk.so") ||
+        System.IO.File.Exists("/usr/local/lib/picogk.1.7.so"))
+        picoGKAvailable = true;
 }
-catch { picoGKAvailable = false; }
+catch { }
 
-string activeEngine = picoGKAvailable ? "PicoGK" : "MathSTL-MarchingCubes-Fallback";
+string activeEngine = picoGKAvailable ? "PicoGK" : "MathSTL-MarchingCubes";
 
 // ── Health ──
 app.MapGet("/health", () => Results.Ok(new {
@@ -29,13 +27,12 @@ app.MapGet("/health", () => Results.Ok(new {
     engine = activeEngine,
     picoGK = picoGKAvailable,
     fallback = !picoGKAvailable,
-    version = "1.1.0",
-    surfaces = new[]{"gyroid","schwarz_p","schwarz_d","diamond","lidi,
+    version = "1.2.0",
+    surfaces = new[]{"gyroid","schwarz_p","schwarz_d","diamond","lidinoid","neovius"},
     timestamp = DateTime.UtcNow
 }));
 
-// ── TPMS endpoint ──
-app.MapPost("/api/tpms", (TPMSRequest req) =>
+// ─ost("/api/tpms", (TPMSRequest req) =>
 {
     try
     {
@@ -46,50 +43,35 @@ app.MapPost("/api/tpms", (TPMSRequest req) =>
         double sy = req.BoundingBox?.Length > 1 ? req.BoundingBox[1] : 30;
         double sz = req.BoundingBox?.Length > 2 ? req.BoundingBox[2] : 30;
 
-        byte[] stl;
-        string usedEngine;
-
-        if (picoGKAvailable)
-        {
-            // TODO: PicoGK native TPMS generation
-            // stl = PicoGKGenerator.GenerateTPMS(req);
-            // For now, fall through to MathSTL until PicoGK endpoints are wired
-            stl = MathSTLGenerator.GenerateTPMS(
-                req.SurfaceType ?? "gyroid",
-                req.CellSize > 0 ? req.CellSize : 8,
-                req.WallThickness > 0 ? req.WallThickness : 0.8,
-                sx, sy, sz, res);
-         ngine = "PicoGK (pending wire-up, using MathSTL)";
-        }
-        else
-        {
-            stl = MathSTLGenerator.GenerateTPMS(
-                req.SurfaceType ?? "gyroid",
-                req.CellSize > 0 ? req.CellSize : 8,
-                req.WallThickness > 0 ? req.WallThickness : 0.8,
-                sx, sy, sz, res);
-            usedEngine = "MathSTL-MarchingCubes-Fallback";
-        }
+        byte[] stl = MathSTLGenerator.GenerateTPMS(
+            req.SurfaceType ?? "gyroid",
+            req.CellSize > 0 ? req.CellSize : 8,
+            req.WallThickness > 0 ? req.WallThickness : 0.8,
+            sx, sy, sz, res);
 
         int triCount = BitConverter.ToInt32(stl, 80);
 
         return Results.Ok(new {
             success = true,
-            engine = usedEngine,
+            engine = activeEngine,
             stlBase64 = Convert.ToBase64String(stl),
             triangles = triCount,
             fileSize = stl.Length,
-            parameters = new { req.SurfaceType, req.CellSize, req.WallThickness,
-                             boundingBox = new[]{sx,sy,sz}, resolution = res }
+            parameters = new {
+                req.SurfaceType, req.CellSize, req.WallThickness,
+                boundingBox = new[]{sx,sy,sz}, resolution = res
+            }
         });
     }
     catch (Exception ex)
     {
-        return Results.Problem(title: "TPMS generation failed", detail: ex.Message, statusCode: 500);
+        return Results.Problem(title: "TPMS generation failed",
+            detail: ex.Message, statusCode: 500);
     }
 });
 
-// ── Lattice endpoint ─MapPost("/api/lattice", (LatticeRequest req) =>
+// ── Lattice ──
+app.MapPost("/api/lattice", (LatticeRequest req) =>
 {
     try
     {
@@ -109,17 +91,15 @@ app.MapPost("/api/tpms", (TPMSRequest req) =>
 
         return Results.Ok(new {
             success = true,
-            engine = picoGKAvailable ? "PicoGK" : "MathSTL-Fallback",
-            stlBase64 = Convert.ToBase64String(stl),
+            engine = activeEn          stlBase64 = Convert.ToBase64String(stl),
             triangles = triCount,
-            fileSize = stl.Length,
-            parameters = new { req.UnitCell, req.StrutDiameter,
-                             boundingBox = new[]{sx,sy,sz}, resolution = res }
+            fileSize = stl.Length
         });
     }
     catch (Exception ex)
     {
-        return Results.Problem(title: "Lattice generation failed", detail: ex.Message, statusCode: 500);
+        return Results.Problem(title: "Lattice generation failed",
+            detail: ex.Message, statusCode: 500);
     }
 });
 
@@ -141,10 +121,10 @@ app.MapPost("/api/generate", (GenerateRequest req) =>
             stl = MathSTLGenerator.GenerateLattice(
                 req.SurfaceType ?? "octet",
                 req.CellSize > 0 ? req.CellSize : 2,
-                sx, sy, sz, res);
+         x, sy, sz, res);
         else
             stl = MathSTLGenerator.GenerateTPMS(
-             urfaceType ?? "gyroid",
+                req.SurfaceType ?? "gyroid",
                 req.CellSize > 0 ? req.CellSize : 8,
                 req.WallThickness > 0 ? req.WallThickness : 0.8,
                 sx, sy, sz, res);
@@ -153,7 +133,7 @@ app.MapPost("/api/generate", (GenerateRequest req) =>
 
         return Results.Ok(new {
             success = true,
-            engine = picoGKAvailable ? "PicoGK" : "MathSTL-Fallback",
+            engine = activeEngine,
             stlBase64 = Convert.ToBase64String(stl),
             triangles = triCount,
             fileSize = stl.Length
@@ -161,15 +141,16 @@ app.MapPost("/api/generate", (GenerateRequest req) =>
     }
     catch (Exception ex)
     {
-        return Results.Problem(title: "Generation failed", detail: ex.Message, statusCode: 500);
+        return Results.Problem(title: "Generation failed",
+            detail: ex.Message, statusCode: 500);
     }
 });
 
 app.Run();
 
-// ── Request models ──
 record TPMSRequest(string? SurfaceType, double CellSize, double WallThickness,
                    double[]? BoundingBox, string? Resolution);
 record LatticeRequest(string? UnitCell, double StrutDiameter,
                       double[]? BoundingBox, string? Resolution);
-record GenerateRequest(string? Type, string? SurfaceType, double Cel                      double WallThickness, double[]? BoundingBox, string? Resolution);
+record GenerateRequest(string? Type, string? SurfaceType, double CellSize,
+                       double WallThickness, double[]? BoundingBox, string? Resolution);
