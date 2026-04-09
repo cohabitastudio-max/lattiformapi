@@ -16,7 +16,7 @@
 using System.Numerics;
 using System.Text.Json;
 using PicoGK;
-using Leap71.ShapeKernel;
+using ShapeKernel;
 
 var builder = WebApplication.CreateBuilder(args);
 
