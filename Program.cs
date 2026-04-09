@@ -24,10 +24,7 @@ using System.Numerics;
 using System.Text.Json;
 using PicoGK;
 using Leap71.ShapeKernel;
-<<<<<<< HEAD
 using Leap71.LatticeLibrary;
-=======
->>>>>>> ca332f6 (fix LEAP71 namespaces and build only picogk target)
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -164,15 +161,9 @@ static GenerateResponse GenerateGeometry(GenerateRequest req)
         Metadata = new GeometryMetadata
         {
             VoxelSize     = voxelSize,
-<<<<<<< HEAD
             BoundingBoxMM = req.BoundingBox ?? new float[] { 50, 50, 50 },
             TriangleCount = mesh.nTriangleCount(),
             VertexCount   = mesh.nVertexCount(),
-=======
-            BoundingBoxMM = req.BoundingBox ?? new float[]{50,50,50},
-            TriangleCount = 0,
-            VertexCount   = 0,
->>>>>>> ca332f6 (fix LEAP71 namespaces and build only picogk target)
         }
     };
 }
@@ -198,20 +189,12 @@ static Voxels BuildTPMS(string type, Dictionary<string, float>? p, float[]? bbox
 
     IImplicit surface = type switch
     {
-<<<<<<< HEAD
         "schwarz_p" => new ImplicitSchwarzPrimitive(cell, wall),
         "schwarz_d" => new ImplicitSchwarzDiamond(cell, wall),
         "gyroid"    => new ImplicitSplitVoidGyroid(cell, wall, true),
         "lidinoid"  => new ImplicitLidinoid(cell, wall),
         "iwp"       => new ImplicitSchwarzPrimitive(cell * 0.9f, wall),  // IWP approx
         _           => new ImplicitSchwarzPrimitive(cell, wall)
-=======
-        "gyroid"    => new ImplicitGyroid(cell, wall),
-        "schwarz_p" => new ImplicitSchwarzPrimitive(cell, wall),
-        "schwarz_d" => new ImplicitSchwarzDiamond(cell, wall),
-        "lidinoid"  => new ImplicitLidinoid(cell, wall),
-        _           => new ImplicitGyroid(cell, wall)
->>>>>>> ca332f6 (fix LEAP71 namespaces and build only picogk target)
     };
 
     voxBox.IntersectImplicit(surface);
