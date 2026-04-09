@@ -201,16 +201,6 @@ static Voxels BuildTPMS(string type, Dictionary<string, float>? p, float[]? bbox
     return voxBox;
 }
 
-    public float fSignedDistance(in Vector3 vecPt)
-    {
-        var scaled = new Vector3(
-            vecPt.X * m_fScale,
-            vecPt.Y * m_fScale,
-            vecPt.Z * m_fScale);
-        float dist = m_oPattern.fSignedDistance(scaled);
-        return MathF.Abs(dist) - m_fWall * 0.5f;
-    }
-}
 
 // ── Lattice builder ───────────────────────────────────────
 // PicoGK.Lattice con AddBeam — API nativa de PicoGK
