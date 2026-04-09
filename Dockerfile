@@ -1,7 +1,7 @@
 # ============================================================
 #  LATTIFORM API — Dockerfile multi-stage
 #  .NET 9 + PicoGK 1.7.7.5 headless (compilado desde source)
-#  Base: Ubuntu 22.04 (Jammy)
+#  Base: Ubuntu 22.04 (Jammy) + CMake 3.28 desde Kitware
 # ============================================================
 
 # ── Stage 1: Compilar picogk.so desde source ─────────────
@@ -9,9 +9,9 @@ FROM ubuntu:22.04 AS picogk-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Dependencias base + Kitware GPG para CMake moderno
 RUN apt-get update && apt-get install -y \
     build-essential \
-    cmake \
     git \
     ninja-build \
     pkg-config \
@@ -21,6 +21,16 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     liblz4-dev \
     libzstd-dev \
+    ca-certificates \
+    gpg \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalar CMake >= 3.25 desde el repo oficial de Kitware
+RUN wget -qO /tmp/kitware.sh https://apt.kitware.com/kitware-archive.sh \
+    && bash /tmp/kitware.sh \
+    && apt-get update && apt-get install -y cmake \
+    && cmake --version \
     && rm -rf /var/lib/apt/lists/*
 
 # Clonar PicoGKRuntime con submodules
@@ -36,8 +46,8 @@ RUN cmake -B build -G Ninja \
     -DPICOGK_BUILD_VIEWER=OFF \
     && cmake --build build --config Release -j$(nproc)
 
-# El .so estará en build/Dist/ o build/
-RUN find /src/PicoGKRuntime/build -name "*.so" | head -5
+# Mostrar dónde quedó el .so
+RUN find /src/PicoGKRuntime/build -name "*.so" | head -10
 
 # ── Stage 2: Build .NET app ───────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
@@ -63,14 +73,16 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar picogk.so compilado desde el builder
-COPY --from=picogk-builder /src/PicoGKRuntime/build/Dist/picogk.so /usr/local/lib/picogk.so
-RUN ldconfig
+# Copiar picogk.so compilado — buscar en múltiples rutas posibles
+COPY --from=picogk-builder /src/PicoGKRuntime/build /tmp/picogk-build
+RUN find /tmp/picogk-build -name "*.so" -exec cp {} /usr/local/lib/picogk.so \; \
+    && ldconfig \
+    && rm -rf /tmp/picogk-build
 
 WORKDIR /app
 COPY --from=build /app/publish .
 
-# Copiar .so también junto al ejecutable (fallback de carga nativa)
+# Copia local junto al ejecutable (fallback de P/Invoke)
 RUN cp /usr/local/lib/picogk.so . 2>/dev/null || true
 
 ENV ASPNETCORE_URLS="http://+:${PORT:-8080}"
