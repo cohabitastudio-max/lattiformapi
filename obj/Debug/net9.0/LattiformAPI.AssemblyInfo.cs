@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LattiformAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4e81651b0d7286fe37739c76549d756daaf6b9ae")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a3eb7b3ff1f5f799769649316eb7f4ae73d347dc")]
 [assembly: System.Reflection.AssemblyProductAttribute("LattiformAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LattiformAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
